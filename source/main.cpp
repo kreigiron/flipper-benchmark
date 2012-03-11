@@ -1,72 +1,74 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <malloc.h>
+#include <ogcsys.h>
 #include <gccore.h>
-#include <wiiuse/wpad.h>
 
-static void *xfb = NULL;
-static GXRModeObj *rmode = NULL;
-
-//---------------------------------------------------------------------------------
-int main(int argc, char **argv) {
-//---------------------------------------------------------------------------------
-
-	// Initialise the video system
-	VIDEO_Init();
-	
-	// This function initialises the attached controllers
-	WPAD_Init();
-	
-	// Obtain the preferred video mode from the system
-	// This will correspond to the settings in the Wii menu
-	rmode = VIDEO_GetPreferredMode(NULL);
-
-	// Allocate memory for the display in the uncached region
-	xfb = MEM_K0_TO_K1(SYS_AllocateFramebuffer(rmode));
-	
-	// Initialise the console, required for printf
-	console_init(xfb,20,20,rmode->fbWidth,rmode->xfbHeight,rmode->fbWidth*VI_DISPLAY_PIX_SZ);
-	
-	// Set up the video registers with the chosen mode
-	VIDEO_Configure(rmode);
-	
-	// Tell the video hardware where our display memory is
-	VIDEO_SetNextFramebuffer(xfb);
-	
-	// Make the display visible
-	VIDEO_SetBlack(FALSE);
-
-	// Flush the video register changes to the hardware
-	VIDEO_Flush();
-
-	// Wait for Video setup to complete
-	VIDEO_WaitVSync();
-	if(rmode->viTVMode&VI_NON_INTERLACE) VIDEO_WaitVSync();
-
-
-	// The console understands VT terminal escape codes
-	// This positions the cursor on row 2, column 0
-	// we can use variables for this with format codes too
-	// e.g. printf ("\x1b[%d;%dH", row, column );
-	printf("\x1b[2;0H");
-	
-
-	printf("Hello World!");
-
-	while(1) {
-
-		// Call WPAD_ScanPads each loop, this reads the latest controller states
-		WPAD_ScanPads();
-
-		// WPAD_ButtonsDown tells us which buttons were pressed in this loop
-		// this is a "one shot" state which will not fire again until the button has been released
-		u32 pressed = WPAD_ButtonsDown(0);
-
-		// We return to the launcher application via exit
-		if ( pressed & WPAD_BUTTON_HOME ) exit(0);
-
-		// Wait for the next frame
-		VIDEO_WaitVSync();
-	}
-
-	return 0;
-}
+#include <ogc/ipc.h>
+     
+    static void *xfb = NULL;
+    static GXRModeObj *rmode = NULL;
+     
+    typedef void (*Loader_Entry)(void);
+    Loader_Entry loader = (Loader_Entry)0x80001800;
+     
+    void Reboot()
+    {
+            int fd = IOS_Open("/dev/stm/immediate", 0);
+            IOS_Ioctl(fd, 0x2001, NULL, 0, NULL, 0);
+            IOS_Close(fd);
+    }
+     
+    int main(int argc, char **argv) {
+     
+            VIDEO_Init();
+            PAD_Init();
+           
+            switch(VIDEO_GetCurrentTvMode()) {
+                    case VI_NTSC:
+                            rmode = &TVNtsc480IntDf;
+                            break;
+                    case VI_PAL:
+                            rmode = &TVPal528IntDf;
+                            break;
+                    case VI_MPAL:
+                            rmode = &TVMpal480IntDf;
+                            break;
+                    default:
+                            rmode = &TVNtsc480IntDf;
+                            break;
+            }
+     
+            xfb = MEM_K0_TO_K1(SYS_AllocateFramebuffer(rmode));
+            console_init(xfb,20,20,rmode->fbWidth,rmode->xfbHeight,rmode->fbWidth*VI_DISPLAY_PIX_SZ);
+           
+            VIDEO_Configure(rmode);
+            VIDEO_SetNextFramebuffer(xfb);
+            VIDEO_SetBlack(FALSE);
+            VIDEO_Flush();
+            VIDEO_WaitVSync();
+            if(rmode->viTVMode&VI_NON_INTERLACE) VIDEO_WaitVSync();
+     
+            printf("\n");
+            printf("Hello World!\n");
+            printf("Return to Loader by Pressing A\n");
+            printf("Reboot by Pressing START\n");
+     
+            while(1) {
+                    VIDEO_WaitVSync();
+                    PAD_ScanPads();
+     
+                    int buttonsDown = PAD_ButtonsDown(0);
+                    if( buttonsDown & PAD_BUTTON_A ) {
+                            printf("Button A pressed.\n");
+                            loader();
+                    }
+                    if ( buttonsDown & PAD_BUTTON_START ) {
+                            printf("Start Button Pressed \n");
+                            Reboot();
+                    }
+            }
+     
+            return 0;
+    }
