@@ -12,7 +12,8 @@ class benchmark {
 
  protected:
   virtual int writeToLog(string logmessage);
-  
+    
  private:
   string benchmark_log;
+  string log_file = "sd:/";
 };
