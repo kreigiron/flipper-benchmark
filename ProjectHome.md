@@ -1,0 +1,1 @@
+A Benchmark app using DevKit PPC for Wii and Gamecube, developed by Erik Giron for the grade's thesis
